@@ -190,8 +190,9 @@ textarea.pt.big{min-height:180px}
 <script>
 {
 const ORIG='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-const PRESET=/*P*/{"st": {"bg": "#FFFFFF", "hText": "Type in\nYour texts", "hSize": 220, "hLead": 1.0, "hX": 0.045, "hY": 0.034, "tText": "Editable\ntext layers", "tSize": 113, "tLead": 0.95, "tX": 0.045, "tY": 0.809, "tW": 0.5, "vY": 0.815, "gY": 0.903, "lText": "window mosaic\nby dhrupad", "bShow": false, "imageScale": 0.67, "layerOrder": ["t", "v", "b", "l", "img", "g", "h"]}, "photo": null}/*E*/;
-const W=1080,H=1350;
+const PRESET=/*P*/null/*E*/;
+let W=1080,H=1350;
+const RATIOS={'4:5 Portrait · 1080×1350':[1080,1350],'1:1 Square · 1080×1080':[1080,1080],'9:16 Story · 1080×1920':[1080,1920],'16:9 Landscape · 1920×1080':[1920,1080],'3:4 · 1080×1440':[1080,1440],'4:3 · 1440×1080':[1440,1080],'2:3 · 1080×1620':[1080,1620],'3:2 · 1620×1080':[1620,1080],'A4 · 1080×1527':[1080,1527],'21:9 Banner · 2520×1080':[2520,1080]};
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 const svg=p=>`<svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
 const I={
@@ -225,6 +226,7 @@ const typeSec=(p,label,d,col)=>[
  ['sl',p+'Y','Position Y',-.5,1.2,.001,d.y],['sl',p+'W','Box width',.05,1.2,.005,d.w]];
 const S=[
  ['sec','Presets'],['btn','presetRef','Reference look','presetClassic','Classic look'],
+ ['sec','Canvas'],['sel','ratio','Size & ratio',Object.keys(RATIOS),'4:5 Portrait · 1080×1350'],
  ['sec','Grid & snap',1],['tog','gridShow','Show grid',false],['sl','gridSize','Grid size (px)',10,270,5,90],['sl','gridOp','Grid strength',.05,1,.01,.3],['tog','snapGrid','Snap to grid',true],['tog','snapObj','Snap to edges & centers',true],
  ['sec','Shapes',1],['shapes'],
  ['sec','Photo'],['file'],['tog','mosaicShow','Show mosaic',true],['sl','photoX','Image X',-1080,1080,1,0],['sl','photoY','Image Y',-1350,1350,1,0],
@@ -285,6 +287,9 @@ D.layerOrder=['h','t','v','b','l','g','img'];D.shapes=[];
 if(PRESET&&PRESET.st)for(const k in PRESET.st)if(k in D)D[k]=JSON.parse(JSON.stringify(PRESET.st[k]));
 let st={...D};
 try{const s=PRESET?null:JSON.parse(localStorage.getItem('newtab-mosaic-v4')||'null');if(s)for(const k in s)if(k in D)st[k]=s[k]}catch(e){}
+if(!RATIOS[st.ratio])st.ratio=D.ratio;
+function applyRatio(){[W,H]=RATIOS[st.ratio]||RATIOS[D.ratio];cv.width=W;cv.height=H}
+applyRatio();
 st.shapes=Array.isArray(st.shapes)?JSON.parse(JSON.stringify(st.shapes)):[];
 function fixOrder(){const ids=new Set(st.shapes.map(x=>'sh'+x.id));const o=(Array.isArray(st.layerOrder)?st.layerOrder:[]).filter((k,i,a)=>a.indexOf(k)===i&&(D.layerOrder.includes(k)||ids.has(k)));for(const k of D.layerOrder)if(!o.includes(k))o.push(k);for(const k of ids)if(!o.includes(k))o.unshift(k);st.layerOrder=o}
 fixOrder();
@@ -714,6 +719,7 @@ const WINK=new Set(['scatter','coverage','gap','offset','overlap','cutEdges','or
 const FONTK=/^[htvbl](Font|Weight)$/;
 let dirty=true,recBlob=null;
 function changed(k){
+ if(k==='ratio'){applyRatio();leaves=layout();removed.clear();buildWins();fit()}
  if(STRUCT.has(k)){leaves=layout();removed.clear()}
  if(STRUCT.has(k)||WINK.has(k))buildWins();
  if(FONTK.test(k)){const p=k[0];document.fonts&&document.fonts.load(`${st[p+'Weight']} 40px ${FONTS[st[p+'Font']]}`).then(()=>dirty=true,()=>{})}
@@ -788,7 +794,7 @@ cv.addEventListener('pointermove',e=>{
  let dx=p.x-drag.start.x,dy=p.y-drag.start.y;
  if(drag.b0){const sn=snapBox(k,drag.b0,dx,dy,e.altKey);dx=sn.dx;dy=sn.dy}
  const o=drag.orig;
- if(k==='img'){cv.style.cursor='grabbing';setVal('photoX',Math.round(clamp(o.x+dx,-1080,1080)));setVal('photoY',Math.round(clamp(o.y+dy,-1350,1350)))}
+ if(k==='img'){cv.style.cursor='grabbing';setVal('photoX',Math.round(clamp(o.x+dx,-W,W)));setVal('photoY',Math.round(clamp(o.y+dy,-H,H)))}
  else if(isSh(k)){const q=shapeOf(k);q.x=o.x+dx;q.y=o.y+dy;persist();dirty=true}
  else{setVal(k+'X',+clamp((o.x+dx)/W,-.5,1.2).toFixed(4));setVal(k+'Y',+clamp((o.y+dy)/H,-.5,1.2).toFixed(4))}
 });
@@ -819,7 +825,7 @@ document.addEventListener('keydown',e=>{
  else if(e.key==='Escape')select(null);
  else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();const k=sel;if(isSh(k)){removeShape(k);return}setVal(visKey(k),false);select(null);layersUI()}
  else if(e.key.startsWith('Arrow')){e.preventDefault();const n=e.shiftKey?10:1,dx=e.key==='ArrowRight'?n:e.key==='ArrowLeft'?-n:0,dy=e.key==='ArrowDown'?n:e.key==='ArrowUp'?-n:0;
-  if(sel==='img'){setVal('photoX',clamp(st.photoX+dx,-1080,1080));setVal('photoY',clamp(st.photoY+dy,-1350,1350))}
+  if(sel==='img'){setVal('photoX',clamp(st.photoX+dx,-W,W));setVal('photoY',clamp(st.photoY+dy,-H,H))}
   else if(isSh(sel)){const q=shapeOf(sel);q.x+=dx;q.y+=dy;persist();dirty=true}
   else{setVal(sel+'X',+clamp(st[sel+'X']+dx/W,-.5,1.2).toFixed(3));setVal(sel+'Y',+clamp(st[sel+'Y']+dy/H,-.5,1.2).toFixed(3))}}
 });
